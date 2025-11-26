@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { AuthInput } from "@/components/auth/AuthInput";
@@ -10,7 +10,7 @@ import { User, Mail, Lock, ShieldCheck } from "lucide-react";
 
 export default function Signup() {
   const navigate = useNavigate();
-  const { signup, isLoading } = useAuth();
+  const { signup, isLoading, isAuthenticated } = useAuth();
 
   const [formData, setFormData] = useState({
     name: "",
@@ -22,11 +22,22 @@ export default function Signup() {
   const [submitError, setSubmitError] = useState("");
   const [submitSuccess, setSubmitSuccess] = useState("");
 
+  // Redirect if already authenticated
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate("/chat");
+    }
+  }, [isAuthenticated, navigate]);
+
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
 
     if (!formData.name.trim()) {
       newErrors.name = "Name is required";
+    }
+
+    if (!formData.email.trim()) {
+      newErrors.email = "Email is required";
     }
 
     if (formData.password.length < 6) {
@@ -50,9 +61,8 @@ export default function Signup() {
 
     const result = await signup({
       name: formData.name,
-      email: formData.email || undefined,
+      email: formData.email,
       password: formData.password,
-      confirmPassword: formData.confirmPassword,
     });
 
     if (result.success) {
@@ -70,6 +80,14 @@ export default function Signup() {
       setErrors((prev) => ({ ...prev, [name]: "" }));
     }
   };
+
+  if (isLoading && !formData.email) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <LoadingSpinner size="lg" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-4 relative overflow-hidden">
@@ -111,8 +129,10 @@ export default function Signup() {
               type="email"
               value={formData.email}
               onChange={handleChange}
-              placeholder="Enter your email (optional)"
+              placeholder="Enter your email"
               icon={Mail}
+              error={errors.email}
+              required
               autoComplete="email"
             />
 

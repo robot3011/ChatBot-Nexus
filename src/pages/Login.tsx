@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { AuthInput } from "@/components/auth/AuthInput";
@@ -6,14 +6,13 @@ import { FormMessage } from "@/components/shared/FormMessage";
 import { Logo } from "@/components/shared/Logo";
 import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
 import { useAuth } from "@/contexts/AuthContext";
-import { User, Mail, Lock } from "lucide-react";
+import { Mail, Lock } from "lucide-react";
 
 export default function Login() {
   const navigate = useNavigate();
-  const { login, isLoading } = useAuth();
+  const { login, isLoading, isAuthenticated } = useAuth();
 
   const [formData, setFormData] = useState({
-    name: "",
     email: "",
     password: "",
   });
@@ -21,11 +20,18 @@ export default function Login() {
   const [submitError, setSubmitError] = useState("");
   const [submitSuccess, setSubmitSuccess] = useState("");
 
+  // Redirect if already authenticated
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate("/chat");
+    }
+  }, [isAuthenticated, navigate]);
+
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
 
-    if (!formData.name.trim()) {
-      newErrors.name = "Name is required";
+    if (!formData.email.trim()) {
+      newErrors.email = "Email is required";
     }
 
     if (formData.password.length < 6) {
@@ -44,8 +50,7 @@ export default function Login() {
     if (!validateForm()) return;
 
     const result = await login({
-      name: formData.name,
-      email: formData.email || undefined,
+      email: formData.email,
       password: formData.password,
     });
 
@@ -64,6 +69,14 @@ export default function Login() {
       setErrors((prev) => ({ ...prev, [name]: "" }));
     }
   };
+
+  if (isLoading && !formData.email) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <LoadingSpinner size="lg" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-4 relative overflow-hidden">
@@ -88,25 +101,15 @@ export default function Login() {
             {submitSuccess && <FormMessage type="success" message={submitSuccess} />}
 
             <AuthInput
-              label="Name"
-              name="name"
-              value={formData.name}
-              onChange={handleChange}
-              placeholder="Enter your name"
-              icon={User}
-              error={errors.name}
-              required
-              autoComplete="name"
-            />
-
-            <AuthInput
               label="Email"
               name="email"
               type="email"
               value={formData.email}
               onChange={handleChange}
-              placeholder="Enter your email (optional)"
+              placeholder="Enter your email"
               icon={Mail}
+              error={errors.email}
+              required
               autoComplete="email"
             />
 

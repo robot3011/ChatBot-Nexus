@@ -2,6 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/shared/Logo";
 import { Avatar } from "@/components/shared/Avatar";
 import { useAuth } from "@/contexts/AuthContext";
+import { useNavigate } from "react-router-dom";
 import { LogOut, Menu, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -12,7 +13,17 @@ interface ChatHeaderProps {
 
 export function ChatHeader({ onClearChat }: ChatHeaderProps) {
   const { user, logout } = useAuth();
+  const navigate = useNavigate();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  const handleLogout = async () => {
+    await logout();
+    navigate("/login");
+  };
+
+  // Get user display name from Supabase user metadata
+  const userName = user?.user_metadata?.name || user?.email?.split("@")[0] || "User";
+  const userEmail = user?.email;
 
   return (
     <header className="sticky top-0 z-50 glass border-b border-border">
@@ -30,16 +41,16 @@ export function ChatHeader({ onClearChat }: ChatHeaderProps) {
           <div className="h-8 w-px bg-border" />
 
           <div className="flex items-center gap-3">
-            <Avatar type="user" name={user?.name} size="sm" />
+            <Avatar type="user" name={userName} size="sm" />
             <div className="text-sm">
-              <p className="font-medium text-foreground">{user?.name}</p>
-              {user?.email && (
-                <p className="text-xs text-muted-foreground">{user.email}</p>
+              <p className="font-medium text-foreground">{userName}</p>
+              {userEmail && (
+                <p className="text-xs text-muted-foreground">{userEmail}</p>
               )}
             </div>
           </div>
 
-          <Button variant="ghost" size="icon-sm" onClick={logout} title="Logout">
+          <Button variant="ghost" size="icon-sm" onClick={handleLogout} title="Logout">
             <LogOut className="w-4 h-4" />
           </Button>
         </div>
@@ -64,11 +75,11 @@ export function ChatHeader({ onClearChat }: ChatHeaderProps) {
       >
         <div className="p-4 space-y-3">
           <div className="flex items-center gap-3 pb-3 border-b border-border">
-            <Avatar type="user" name={user?.name} size="sm" />
+            <Avatar type="user" name={userName} size="sm" />
             <div className="text-sm">
-              <p className="font-medium text-foreground">{user?.name}</p>
-              {user?.email && (
-                <p className="text-xs text-muted-foreground">{user.email}</p>
+              <p className="font-medium text-foreground">{userName}</p>
+              {userEmail && (
+                <p className="text-xs text-muted-foreground">{userEmail}</p>
               )}
             </div>
           </div>
@@ -88,7 +99,7 @@ export function ChatHeader({ onClearChat }: ChatHeaderProps) {
           <Button
             variant="ghost"
             className="w-full justify-start text-destructive hover:text-destructive"
-            onClick={logout}
+            onClick={handleLogout}
           >
             <LogOut className="w-4 h-4 mr-2" />
             Logout
