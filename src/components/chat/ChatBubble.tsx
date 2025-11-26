@@ -94,10 +94,10 @@ export function ChatBubble({ message, userName }: ChatBubbleProps) {
               )}
 
               {/* Generated Image */}
-              {message.generatedImage && (
+              {(message.generatedImage || (message.imageUrl && message.imageUrl !== "image_attached")) && (
                 <div className="mt-3">
                   <img
-                    src={message.generatedImage}
+                    src={message.generatedImage || message.imageUrl || ""}
                     alt="AI Generated"
                     className="rounded-lg max-w-full w-full object-cover"
                     loading="lazy"

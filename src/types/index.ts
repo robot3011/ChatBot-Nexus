@@ -1,12 +1,3 @@
-// User types
-export interface User {
-  id: string;
-  name: string;
-  email?: string;
-  avatar?: string;
-  createdAt: Date;
-}
-
 // Message types
 export interface Message {
   id: string;
@@ -15,6 +6,7 @@ export interface Message {
   timestamp: Date;
   attachments?: Attachment[];
   generatedImage?: string;
+  imageUrl?: string | null;
   isLoading?: boolean;
 }
 
@@ -25,20 +17,19 @@ export interface Attachment {
   type: string;
   size: number;
   url: string;
+  base64?: string;
 }
 
 // Auth types
 export interface LoginCredentials {
-  name: string;
-  email?: string;
+  email: string;
   password: string;
 }
 
 export interface SignupCredentials {
   name: string;
-  email?: string;
+  email: string;
   password: string;
-  confirmPassword: string;
 }
 
 // Form state types
@@ -46,4 +37,13 @@ export interface FormState {
   isLoading: boolean;
   error: string | null;
   success: string | null;
+}
+
+// User type for UI display (legacy compatibility)
+export interface User {
+  id: string;
+  name: string;
+  email?: string;
+  avatar?: string;
+  createdAt: Date;
 }
