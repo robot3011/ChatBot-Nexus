@@ -30,21 +30,29 @@ export function ChatInput({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Speech recognition hook
+  // Speech recognition with callbacks
+  const handleSpeechResult = (transcript: string) => {
+    setMessage((prev) => {
+      const newMessage = prev + (prev && !prev.endsWith(" ") ? " " : "") + transcript;
+      return newMessage;
+    });
+    // Focus the textarea after speech input
+    setTimeout(() => textareaRef.current?.focus(), 0);
+  };
+
+  const handleSpeechError = (error: string) => {
+    toast.error(error);
+  };
+
   const {
     isListening,
     isSupported,
+    interimTranscript,
     toggleListening,
+    stopListening,
   } = useSpeechRecognition({
-    onResult: (transcript) => {
-      setMessage((prev) => prev + (prev ? " " : "") + transcript);
-      textareaRef.current?.focus();
-    },
-    onError: (error) => {
-      toast.error(error);
-    },
-    continuous: true,
-    interimResults: true,
+    onResult: handleSpeechResult,
+    onError: handleSpeechError,
   });
 
   // Auto-resize textarea
@@ -55,8 +63,21 @@ export function ChatInput({
     }
   }, [message]);
 
+  // Stop listening when component unmounts or disabled
+  useEffect(() => {
+    if (disabled && isListening) {
+      stopListening();
+    }
+  }, [disabled, isListening, stopListening]);
+
   const handleSend = () => {
     if ((!message.trim() && attachments.length === 0) || isLoading || disabled) return;
+    
+    // Stop listening if active
+    if (isListening) {
+      stopListening();
+    }
+    
     onSendMessage(message, attachments.length > 0 ? attachments : undefined);
     setMessage("");
     setAttachments([]);
@@ -104,6 +125,19 @@ export function ChatInput({
     setShowImagePrompt(false);
   };
 
+  const handleMicClick = () => {
+    if (!isSupported) {
+      toast.error("Speech recognition is not supported in your browser. Please try Chrome, Edge, or Safari.");
+      return;
+    }
+    toggleListening();
+  };
+
+  // Display text: actual message + interim transcript while speaking
+  const displayText = isListening && interimTranscript 
+    ? message + (message && !message.endsWith(" ") ? " " : "") + interimTranscript
+    : message;
+
   return (
     <div className="border-t border-border bg-card/50 p-3 sm:p-4">
       {/* Image Generation Prompt */}
@@ -147,7 +181,12 @@ export function ChatInput({
       )}
 
       {/* Unified Input Container - ChatGPT Style */}
-      <div className="relative flex items-end gap-2 bg-secondary rounded-2xl border border-border p-2 focus-within:ring-2 focus-within:ring-primary/50 focus-within:border-primary transition-all">
+      <div className={cn(
+        "relative flex items-end gap-2 bg-secondary rounded-2xl border p-2 transition-all",
+        isListening 
+          ? "border-destructive ring-2 ring-destructive/30" 
+          : "border-border focus-within:ring-2 focus-within:ring-primary/50 focus-within:border-primary"
+      )}>
         {/* Left Action Buttons */}
         <div className="flex items-center gap-1 pb-1">
           <input
@@ -183,43 +222,43 @@ export function ChatInput({
         {/* Text Input */}
         <textarea
           ref={textareaRef}
-          value={message}
+          value={displayText}
           onChange={(e) => setMessage(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Type a message..."
+          placeholder={isListening ? "Listening..." : "Type a message..."}
           disabled={disabled}
           rows={1}
           className={cn(
             "flex-1 bg-transparent text-sm resize-none border-0 focus:outline-none focus:ring-0",
             "placeholder:text-muted-foreground disabled:opacity-50",
-            "max-h-32 min-h-[36px] py-2 px-1"
+            "max-h-32 min-h-[36px] py-2 px-1",
+            isListening && "text-foreground"
           )}
         />
 
         {/* Right Action Buttons */}
         <div className="flex items-center gap-1 pb-1">
           {/* Microphone Button */}
-          {isSupported && (
-            <Button
-              variant={isListening ? "destructive" : "ghost"}
-              size="icon"
-              className={cn(
-                "h-8 w-8 rounded-lg transition-all",
-                isListening 
-                  ? "bg-destructive hover:bg-destructive/90 animate-pulse" 
-                  : "hover:bg-muted"
-              )}
-              onClick={toggleListening}
-              disabled={disabled}
-              title={isListening ? "Stop recording" : "Voice input"}
-            >
-              {isListening ? (
-                <MicOff className="w-4 h-4" />
-              ) : (
-                <Mic className="w-4 h-4 text-muted-foreground" />
-              )}
-            </Button>
-          )}
+          <Button
+            variant={isListening ? "destructive" : "ghost"}
+            size="icon"
+            className={cn(
+              "h-8 w-8 rounded-lg transition-all",
+              isListening 
+                ? "bg-destructive hover:bg-destructive/90 shadow-lg shadow-destructive/30" 
+                : "hover:bg-muted",
+              !isSupported && "opacity-50"
+            )}
+            onClick={handleMicClick}
+            disabled={disabled}
+            title={!isSupported ? "Speech recognition not supported" : isListening ? "Stop recording" : "Voice input"}
+          >
+            {isListening ? (
+              <MicOff className="w-4 h-4 animate-pulse" />
+            ) : (
+              <Mic className={cn("w-4 h-4", isSupported ? "text-muted-foreground" : "text-muted-foreground/50")} />
+            )}
+          </Button>
 
           {/* Send Button */}
           <Button
@@ -238,11 +277,14 @@ export function ChatInput({
         </div>
       </div>
 
-      {/* Voice Recording Indicator */}
+      {/* Voice Recording Status */}
       {isListening && (
         <div className="mt-2 flex items-center justify-center gap-2 text-sm text-destructive animate-fade-in">
-          <span className="w-2 h-2 rounded-full bg-destructive animate-pulse" />
-          Listening... Speak now
+          <span className="relative flex h-3 w-3">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-3 w-3 bg-destructive"></span>
+          </span>
+          <span>Listening... Speak now</span>
         </div>
       )}
     </div>
