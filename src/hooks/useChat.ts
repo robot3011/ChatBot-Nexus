@@ -4,16 +4,40 @@ import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { Message, Attachment } from "@/types";
 
-const generateId = () => Math.random().toString(36).substring(2) + Date.now().toString(36);
+const generateId = () =>
+  Math.random().toString(36).substring(2) + Date.now().toString(36);
 
 export function useChat() {
   const { session, user } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
+  // -------------------------------
+  // ✅ Add MongoDB Save Function
+  // -------------------------------
+  const saveMessageToMongo = async (message: {
+    role: "user" | "assistant";
+    content: string;
+    imageUrl?: string;
+  }) => {
+    try {
+      await fetch("https://chatbot-nexus-server.onrender.com/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(message),
+      });
+    } catch (err) {
+      console.error("MongoDB save failed:", err);
+    }
+  };
+
   // Get user's display name
   const getUserName = () => {
-    return user?.user_metadata?.name || user?.email?.split("@")[0] || "User";
+    return (
+      user?.user_metadata?.name ||
+      user?.email?.split("@")[0] ||
+      "User"
+    );
   };
 
   // Load chat history on mount
@@ -67,11 +91,13 @@ export function useChat() {
           role: msg.role as "user" | "assistant",
           timestamp: new Date(msg.created_at),
           imageUrl: msg.image_url,
-          generatedImage: msg.image_url && msg.image_url !== "image_attached" ? msg.image_url : undefined,
+          generatedImage:
+            msg.image_url && msg.image_url !== "image_attached"
+              ? msg.image_url
+              : undefined,
         }));
         setMessages(loadedMessages);
       } else {
-        // Show welcome message if no history
         setMessages([
           {
             id: "welcome",
@@ -92,7 +118,10 @@ export function useChat() {
 
       // Get image base64 if attached
       let imageBase64: string | undefined;
-      if (attachments?.length && attachments[0].type.startsWith("image/")) {
+      if (
+        attachments?.length &&
+        attachments[0].type.startsWith("image/")
+      ) {
         imageBase64 = attachments[0].base64 || attachments[0].url;
       }
 
@@ -108,6 +137,15 @@ export function useChat() {
       setMessages((prev) => [...prev, userMessage]);
       setIsLoading(true);
 
+      // -------------------------------
+      // ✅ Save USER message to MongoDB
+      // -------------------------------
+      saveMessageToMongo({
+        role: "user",
+        content,
+        imageUrl: imageBase64 ? "image_attached" : undefined,
+      });
+
       // Add loading message
       const loadingId = "loading-" + generateId();
       setMessages((prev) => [
@@ -122,13 +160,11 @@ export function useChat() {
       ]);
 
       try {
-        // Get conversation history for context
         const conversationHistory = messages.slice(-10).map((m) => ({
           role: m.role,
           content: m.content,
         }));
 
-        // Call chat edge function with streaming
         const response = await fetch(
           `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat`,
           {
@@ -147,72 +183,95 @@ export function useChat() {
 
         if (!response.ok) {
           const errorData = await response.json();
-          throw new Error(errorData.error || "Failed to get response");
+          throw new Error(
+            errorData.error || "Failed to get response"
+          );
         }
 
-        // Handle streaming response
         const reader = response.body?.getReader();
         const decoder = new TextDecoder();
         let fullResponse = "";
 
         if (reader) {
           let buffer = "";
-          
+
           while (true) {
             const { done, value } = await reader.read();
             if (done) break;
-            
+
             buffer += decoder.decode(value, { stream: true });
-            
-            // Process complete lines
+
             const lines = buffer.split("\n");
-            buffer = lines.pop() || ""; // Keep incomplete line in buffer
-            
+            buffer = lines.pop() || "";
+
             for (const line of lines) {
               if (line.startsWith(":") || !line.trim()) continue;
               if (!line.startsWith("data: ")) continue;
-              
+
               const jsonStr = line.slice(6).trim();
               if (jsonStr === "[DONE]") continue;
-              
+
               try {
                 const parsed = JSON.parse(jsonStr);
                 const content = parsed.choices?.[0]?.delta?.content;
+
                 if (content) {
                   fullResponse += content;
-                  // Update message with streaming content
+
                   setMessages((prev) =>
                     prev.map((m) =>
                       m.id === loadingId
-                        ? { ...m, content: fullResponse, isLoading: false }
+                        ? {
+                            ...m,
+                            content: fullResponse,
+                            isLoading: false,
+                          }
                         : m
                     )
                   );
                 }
               } catch {
-                // Ignore parse errors for incomplete chunks
+                // ignore incomplete JSON
               }
             }
           }
         }
 
-        // Final update with complete message
         if (fullResponse) {
           setMessages((prev) =>
             prev.map((m) =>
               m.id === loadingId
-                ? { ...m, content: fullResponse, isLoading: false }
+                ? {
+                    ...m,
+                    content: fullResponse,
+                    isLoading: false,
+                  }
                 : m
             )
           );
+
+          // -------------------------------
+          // ✅ Save ASSISTANT message to MongoDB
+          // -------------------------------
+          saveMessageToMongo({
+            role: "assistant",
+            content: fullResponse,
+          });
         } else {
-          // Remove loading message if no response
-          setMessages((prev) => prev.filter((m) => m.id !== loadingId));
+          setMessages((prev) =>
+            prev.filter((m) => m.id !== loadingId)
+          );
         }
       } catch (error) {
         console.error("Error sending message:", error);
-        setMessages((prev) => prev.filter((m) => m.id !== loadingId));
-        toast.error(error instanceof Error ? error.message : "Failed to send message");
+        setMessages((prev) =>
+          prev.filter((m) => m.id !== loadingId)
+        );
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : "Failed to send message"
+        );
       } finally {
         setIsLoading(false);
       }
@@ -224,7 +283,6 @@ export function useChat() {
     async (prompt: string) => {
       if (!prompt.trim() || isLoading) return;
 
-      // Add user message
       const userMessage: Message = {
         id: generateId(),
         content: `🎨 Generate image: ${prompt}`,
@@ -234,7 +292,6 @@ export function useChat() {
       setMessages((prev) => [...prev, userMessage]);
       setIsLoading(true);
 
-      // Add loading message
       const loadingId = "loading-" + generateId();
       setMessages((prev) => [
         ...prev,
@@ -262,12 +319,13 @@ export function useChat() {
 
         if (!response.ok) {
           const errorData = await response.json();
-          throw new Error(errorData.error || "Failed to generate image");
+          throw new Error(
+            errorData.error || "Failed to generate image"
+          );
         }
 
         const data = await response.json();
 
-        // Update with generated image
         setMessages((prev) =>
           prev.map((m) =>
             m.id === loadingId
@@ -281,10 +339,25 @@ export function useChat() {
               : m
           )
         );
+
+        // -------------------------------
+        // ✅ Save ASSISTANT image message to MongoDB
+        // -------------------------------
+        saveMessageToMongo({
+          role: "assistant",
+          content: data.content,
+          imageUrl: data.imageUrl,
+        });
       } catch (error) {
         console.error("Error generating image:", error);
-        setMessages((prev) => prev.filter((m) => m.id !== loadingId));
-        toast.error(error instanceof Error ? error.message : "Failed to generate image");
+        setMessages((prev) =>
+          prev.filter((m) => m.id !== loadingId)
+        );
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : "Failed to generate image"
+        );
       } finally {
         setIsLoading(false);
       }
@@ -292,41 +365,45 @@ export function useChat() {
     [session, isLoading]
   );
 
-  const uploadAttachment = useCallback(async (file: File): Promise<Attachment | null> => {
-    try {
-      // Convert to base64 for images
-      const base64 = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
+  const uploadAttachment = useCallback(
+    async (file: File): Promise<Attachment | null> => {
+      try {
+        const base64 = await new Promise<string>(
+          (resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () =>
+              resolve(reader.result as string);
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+          }
+        );
 
-      const attachment: Attachment = {
-        id: generateId(),
-        name: file.name,
-        type: file.type,
-        size: file.size,
-        url: URL.createObjectURL(file),
-        base64,
-      };
+        const attachment: Attachment = {
+          id: generateId(),
+          name: file.name,
+          type: file.type,
+          size: file.size,
+          url: URL.createObjectURL(file),
+          base64,
+        };
 
-      return attachment;
-    } catch (error) {
-      console.error("Error uploading file:", error);
-      toast.error("Failed to upload file");
-      return null;
-    }
-  }, []);
+        return attachment;
+      } catch (error) {
+        console.error("Error uploading file:", error);
+        toast.error("Failed to upload file");
+        return null;
+      }
+    },
+    []
+  );
 
   const clearChat = useCallback(async () => {
     if (!session?.user?.id) {
       toast.error("Not authenticated");
       return;
     }
-    
+
     try {
-      // Delete all messages for current user from database
       const { error } = await supabase
         .from("messages")
         .delete()
@@ -338,7 +415,6 @@ export function useChat() {
         return;
       }
 
-      // Reset to welcome message
       setMessages([
         {
           id: "welcome",
@@ -347,7 +423,7 @@ export function useChat() {
           timestamp: new Date(),
         },
       ]);
-      
+
       toast.success("Chat cleared");
     } catch (error) {
       console.error("Error clearing chat:", error);
