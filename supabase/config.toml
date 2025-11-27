@@ -1,7 +1,1 @@
-project_id = "wkoiurqqmvrkcvwlpnex"
-
-[functions.chat]
-verify_jwt = false
-
-[functions.generate-image]
-verify_jwt = false
+project_id = "oetrvgyyjwnmvvitlbph"
