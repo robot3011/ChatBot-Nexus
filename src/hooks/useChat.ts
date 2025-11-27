@@ -320,9 +320,17 @@ export function useChat() {
   }, []);
 
   const clearChat = useCallback(async () => {
+    if (!session?.user?.id) {
+      toast.error("Not authenticated");
+      return;
+    }
+    
     try {
       // Delete all messages for current user from database
-      const { error } = await supabase.from("messages").delete().neq("id", "placeholder");
+      const { error } = await supabase
+        .from("messages")
+        .delete()
+        .eq("user_id", session.user.id);
 
       if (error) {
         console.error("Error clearing chat:", error);
@@ -345,7 +353,7 @@ export function useChat() {
       console.error("Error clearing chat:", error);
       toast.error("Failed to clear chat history");
     }
-  }, [user]);
+  }, [session?.user?.id]);
 
   return {
     messages,
