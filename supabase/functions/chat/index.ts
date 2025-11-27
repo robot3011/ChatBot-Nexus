@@ -19,8 +19,18 @@ serve(async (req) => {
       throw new Error("AI service is not configured");
     }
 
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY");
+    
+    if (!supabaseUrl || !supabaseServiceKey || !supabaseAnonKey) {
+      console.error("Missing Supabase environment variables:", {
+        hasUrl: !!supabaseUrl,
+        hasServiceKey: !!supabaseServiceKey,
+        hasAnonKey: !!supabaseAnonKey,
+      });
+      throw new Error("Database configuration error");
+    }
     
     // Get user from auth header
     const authHeader = req.headers.get("Authorization");
@@ -31,14 +41,14 @@ serve(async (req) => {
       });
     }
 
-    // Create Supabase client with user's token for RLS
-    const supabaseClient = createClient(supabaseUrl, supabaseServiceKey);
-    const userClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_PUBLISHABLE_KEY")!, {
+    // Create Supabase clients
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
+    const supabaseUser = createClient(supabaseUrl, supabaseAnonKey, {
       global: { headers: { Authorization: authHeader } },
     });
 
     // Verify user
-    const { data: { user }, error: userError } = await userClient.auth.getUser();
+    const { data: { user }, error: userError } = await supabaseUser.auth.getUser();
     if (userError || !user) {
       console.error("User verification failed:", userError);
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
@@ -59,7 +69,7 @@ serve(async (req) => {
 
     // Add conversation history for context
     if (conversationHistory && Array.isArray(conversationHistory)) {
-      for (const msg of conversationHistory.slice(-10)) { // Last 10 messages for context
+      for (const msg of conversationHistory.slice(-10)) {
         messages.push({
           role: msg.role,
           content: msg.content,
@@ -69,7 +79,6 @@ serve(async (req) => {
 
     // Add current message
     if (imageBase64) {
-      // Vision request with image
       messages.push({
         role: "user",
         content: [
@@ -84,17 +93,15 @@ serve(async (req) => {
       messages.push({ role: "user", content: message });
     }
 
-    // Save user message to database
-    const { data: userMessage, error: saveUserError } = await supabaseClient
+    // Save user message to database using admin client
+    const { error: saveUserError } = await supabaseAdmin
       .from("messages")
       .insert({
         user_id: user.id,
         role: "user",
         content: message,
         image_url: imageBase64 ? "image_attached" : null,
-      })
-      .select()
-      .single();
+      });
 
     if (saveUserError) {
       console.error("Error saving user message:", saveUserError);
@@ -109,7 +116,7 @@ serve(async (req) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: imageBase64 ? "google/gemini-2.5-flash" : "google/gemini-2.5-flash",
+        model: "google/gemini-2.5-flash",
         messages,
         stream: true,
       }),
@@ -166,7 +173,7 @@ serve(async (req) => {
         // Save assistant message after stream completes
         if (fullResponse) {
           console.log(`Saving assistant response, length: ${fullResponse.length}`);
-          const { error: saveAssistantError } = await supabaseClient
+          const { error: saveAssistantError } = await supabaseAdmin
             .from("messages")
             .insert({
               user_id: user.id,
