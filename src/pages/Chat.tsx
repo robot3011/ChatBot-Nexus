@@ -1,5 +1,3 @@
-import React, { useEffect } from 'react';
-import { supabase } from './supabaseClient';
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
@@ -10,23 +8,6 @@ import { ChatInput } from "@/components/chat/ChatInput";
 import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
 
 export default function Chat() {
-  useEffect(() => {
-  async function fetchMessages() {
-    // This line asks Supabase for all rows in the 'messages' table
-    const { data, error } = await supabase
-      .from('messages')  // <-- table name
-      .select('*')       // <-- * means all columns
-      .order('created_at', { ascending: true }); // oldest messages first
-
-    if (error) {
-      console.error('Error fetching messages:', error);
-    } else {
-      console.log('Messages fetched:', data);
-    }
-  }
-
-  fetchMessages(); // <-- Run the function when component loads
-}, []); // empty [] means run only once, when chat opens
   const navigate = useNavigate();
   const { isAuthenticated, isLoading: authLoading } = useAuth();
   const { messages, isLoading, sendMessage, generateImage, uploadAttachment, clearChat } = useChat();
