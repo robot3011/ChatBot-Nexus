@@ -1,52 +1,125 @@
-const express = require('express');
-const mongoose = require('mongoose');
-const cors = require('cors');
+// server/index.js
+const express = require("express");
+const mongoose = require("mongoose");
+const cors = require("cors");
+require("dotenv").config();
 
 const app = express();
 
-// allow frontend to send data
+// ----------------------
+// Middleware
+// ----------------------
 app.use(cors());
 app.use(express.json());
 
-// --------------------------
-// MONGODB CONNECTION
-// --------------------------
-mongoose.connect(
-    "mongodb+srv://Robot3011:Parthik3011%40@chatbot.jpluhqr.mongodb.net/ChatBotDB?retryWrites=true&w=majority&appName=ChatBot"
-)
-.then(() => console.log("MongoDB Connected"))
-.catch(err => console.error(err));
+// ----------------------
+// MongoDB connection
+// ----------------------
+const MONGO_URI = process.env.MONGO_URI;
+if (!MONGO_URI) {
+  console.error("Missing MONGO_URI environment variable!");
+} 
+mongoose
+  .connect(MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
+  .then(() => console.log("MongoDB Connected"))
+  .catch((err) => console.error("MongoDB connection error:", err));
 
-// --------------------------
-// MESSAGE SCHEMA
-// --------------------------
+// ----------------------
+// Schema & Model
+// ----------------------
 const messageSchema = new mongoose.Schema({
-    user: String,
-    bot: String,
-    timestamp: { type: Date, default: Date.now }
+  user: { type: String, default: "" },      // user message text
+  bot: { type: String, default: "" },       // assistant reply text
+  metadata: { type: Object, default: {} },  // optional (attachments, user id, etc)
+  timestamp: { type: Date, default: Date.now },
 });
 
 const Message = mongoose.model("Message", messageSchema);
 
-// --------------------------
-// API ROUTE: SAVE MESSAGE
-// --------------------------
-app.post("/save-message", async (req, res) => {
-    try {
-        const { user, bot } = req.body;
+// ----------------------
+// Health
+// ----------------------
+app.get("/", (req, res) => {
+  res.send("Chatbot Nexus backend is running.");
+});
 
-        const newMessage = new Message({ user, bot });
-        await newMessage.save();
+// ----------------------
+// Save both user + bot message
+// frontend should POST { user: "...", bot: "...", metadata?: {...} }
+// ----------------------
+app.post("/save-chat", async (req, res) => {
+  try {
+    const { user, bot, metadata } = req.body;
 
-        res.status(200).json({ success: true });
-    } catch (error) {
-        res.status(500).json({ success: false, error });
+    if (!user || !bot) {
+      return res.status(400).json({ error: "Both user and bot fields are required" });
     }
+
+    const entry = new Message({ user, bot, metadata });
+    await entry.save();
+
+    return res.status(200).json({ success: true, id: entry._id });
+  } catch (err) {
+    console.error("POST /save-chat error:", err);
+    return res.status(500).json({ error: "Internal server error" });
+  }
 });
 
-// --------------------------
-// START SERVER
-// --------------------------
-app.listen(5000, () => {
-    console.log("Server running on http://localhost:5000");
+// ----------------------
+// (Optional) Save a single message record
+// Accepts { role: "user"|"assistant", content: "...", metadata?: {} }
+// Helpful for compatibility with previous frontend formats.
+// ----------------------
+app.post("/messages", async (req, res) => {
+  try {
+    const { role, content, metadata } = req.body;
+    if (!role || !content) return res.status(400).json({ error: "role and content required" });
+
+    const doc =
+      role === "assistant"
+        ? { user: "", bot: content, metadata }
+        : { user: content, bot: "", metadata };
+
+    const entry = new Message(doc);
+    await entry.save();
+    return res.status(201).json(entry);
+  } catch (err) {
+    console.error("POST /messages error:", err);
+    return res.status(500).json({ error: "Internal server error" });
+  }
 });
+
+// ----------------------
+// Get history (latest first or full list)
+// GET /history?limit=100
+// ----------------------
+app.get("/history", async (req, res) => {
+  try {
+    const limit = Math.min(1000, Number(req.query.limit || 100));
+    const history = await Message.find().sort({ timestamp: 1 }).limit(limit).lean();
+    return res.status(200).json(history);
+  } catch (err) {
+    console.error("GET /history error:", err);
+    return res.status(500).json({ error: "Could not load history" });
+  }
+});
+
+// ----------------------
+// Clear history (dangerous — for demo/reset only)
+// DELETE /history
+// ----------------------
+app.delete("/history", async (req, res) => {
+  try {
+    await Message.deleteMany({});
+    return res.status(200).json({ success: true });
+  } catch (err) {
+    console.error("DELETE /history error:", err);
+    return res.status(500).json({ error: "Failed to clear history" });
+  }
+});
+
+// ----------------------
+// Start server
+// ----------------------
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
