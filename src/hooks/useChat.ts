@@ -84,7 +84,6 @@ export function useChat() {
         imageBase64 = attachments[0].base64 || attachments[0].url;
       }
 
-      // Add user message to UI
       const userMessage: Message = {
         id: generateId(),
         role: "user",
@@ -104,7 +103,6 @@ export function useChat() {
         timestamp: new Date(),
       });
 
-      // Loading placeholder
       const loadingId = generateId();
       setMessages((prev) => [
         ...prev,
@@ -123,7 +121,6 @@ export function useChat() {
           content: m.content,
         }));
 
-        // ⭐ AI LOGIC — DO NOT TOUCH (preserved exactly)
         const response = await fetch(
           `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat`,
           {
@@ -181,7 +178,6 @@ export function useChat() {
           }
         }
 
-        // Save assistant reply
         if (full) {
           saveMessageToMongo({
             role: "assistant",
@@ -200,7 +196,7 @@ export function useChat() {
   );
 
   // -----------------------------------------------------
-  // CLEAR CHAT — CORRECT ENDPOINT
+  // CLEAR CHAT (CORRECT ENDPOINT)
   // -----------------------------------------------------
   const clearChat = async () => {
     try {
