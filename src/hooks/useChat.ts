@@ -14,20 +14,20 @@ export function useChat() {
   const [isLoading, setIsLoading] = useState(false);
 
   // -----------------------------------------------------
-  // ✅ Fetch full chat history from MongoDB via Render
+  // ✅ Fetch full chat history from MongoDB (CORRECT ENDPOINT)
   // -----------------------------------------------------
   useEffect(() => {
     const loadHistory = async () => {
       try {
-        const res = await fetch(`${API_URL}/messages`);
+        const res = await fetch(`${API_URL}/history`);
         const data = await res.json();
 
         if (!Array.isArray(data)) return;
 
         const loaded = data.map((msg: any) => ({
           id: generateId(),
-          role: msg.role,
-          content: msg.content,
+          role: msg.user ? "user" : "assistant",
+          content: msg.user || msg.bot,
           timestamp: new Date(msg.timestamp),
           imageUrl: msg.imageUrl,
         }));
@@ -53,7 +53,7 @@ export function useChat() {
   }, []);
 
   // -----------------------------------------------------
-  // SAVE MESSAGE TO MONGO
+  // SAVE MESSAGE TO MONGO (this route exists)
   // -----------------------------------------------------
   const saveMessageToMongo = async (message: any) => {
     try {
@@ -73,7 +73,7 @@ export function useChat() {
     "User";
 
   // -----------------------------------------------------
-  // SEND MESSAGE (USER + ASSISTANT)
+  // SEND MESSAGE (AI LOGIC UNTOUCHED)
   // -----------------------------------------------------
   const sendMessage = useCallback(
     async (content: string, attachments?: Attachment[]) => {
@@ -123,7 +123,7 @@ export function useChat() {
           content: m.content,
         }));
 
-        // ➜ KEEP USING YOUR EXISTING AI FUNCTION  
+        // ⭐ AI LOGIC — DO NOT TOUCH (preserved exactly)
         const response = await fetch(
           `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat`,
           {
@@ -200,11 +200,12 @@ export function useChat() {
   );
 
   // -----------------------------------------------------
-  // CLEAR CHAT (Mongo only)
+  // CLEAR CHAT — CORRECT ENDPOINT
   // -----------------------------------------------------
   const clearChat = async () => {
     try {
-      await fetch(`${API_URL}/messages`, { method: "DELETE" });
+      await fetch(`${API_URL}/history`, { method: "DELETE" });
+
       setMessages([
         {
           id: "welcome",
@@ -213,6 +214,7 @@ export function useChat() {
           timestamp: new Date(),
         },
       ]);
+
       toast.success("Chat cleared!");
     } catch (e) {
       toast.error("Failed to clear");
